@@ -47,37 +47,49 @@ ImagePublisher::ImagePublisher(const std::string &node_name,
   RCLCPP_INFO(this->get_logger(), "Connecting to Clarius at %s:%u",
               ipAddr_.c_str(), port_);
 
-  us_image_publisher_ =
-      this->create_publisher<sensor_msgs::msg::Image>(us_image_topic_name_, 10);
   enable_freeze_service_ = this->create_service<std_srvs::srv::SetBool>(
       "enable_freeze", std::bind(&ImagePublisher::enableFreeze, this,
                                  std::placeholders::_1, std::placeholders::_2));
 
+  RCLCPP_INFO(this->get_logger(), "Node initialized.");
+}
+void ImagePublisher::init() {
   // Setup timer
+  RCLCPP_INFO(this->get_logger(), "Creating image publisher");
+  image_transport_ = std::make_shared<image_transport::ImageTransport>(
+      this->shared_from_this());
+  us_image_publisher_ = image_transport_->advertise(us_image_topic_name_, 10);
+
   image_publisher_timer_ =
       this->create_wall_timer(std::chrono::duration<double>(1.0 / 30.0),
                               std::bind(&ImagePublisher::publishUSImage, this));
-
-  RCLCPP_INFO(this->get_logger(), "Node initialized.");
 }
-
 void ImagePublisher::publishUSImage() {
   std::lock_guard<std::mutex> lock(imgMutex);
   if (imgContext.us_image.empty()) {
-    RCLCPP_WARN_ONCE(this->get_logger(), "No image received yet, try to unfreeze");
+    RCLCPP_WARN_ONCE(this->get_logger(),
+                     "No image received yet, try to unfreeze");
     return;
   }
   // RCLCPP_INFO(this->get_logger(), "Image size: %d x %d", imgContext.width,
   //             imgContext.height);
-  cv::imshow("US Image", imgContext.us_image);
+  cv::Mat imgContextCopy = imgContext.us_image.clone();
+  // compress the image to mono8
+  cv::cvtColor(imgContextCopy, imgContextCopy, cv::COLOR_RGBA2GRAY);
+  // increase brightness and contrast
+  imgContextCopy.convertTo(imgContextCopy, CV_8UC1, 1.5, 0); // Increase contrast
+  imgContextCopy = imgContextCopy + cv::Scalar(30); // Increase brightness
+  // RCLCPP_INFO(this->get_logger(), "Publishing image of size: %d x %d",
+  //             imgContextCopy.cols, imgContextCopy.rows);
+  cv::imshow("US Image", imgContextCopy);
   cv::waitKey(1);
-  auto image_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgra8",
-                                      imgContext.us_image.clone())
-                       .toImageMsg();
+  auto image_msg =
+      cv_bridge::CvImage(std_msgs::msg::Header(), "mono8", imgContextCopy)
+          .toImageMsg();
   image_msg->header.frame_id = frame_id_;
   image_msg->header.stamp = this->now();
 
-  us_image_publisher_->publish(*image_msg);
+  us_image_publisher_.publish(*image_msg);
   // imgContext.newImageReceived = false;
 }
 
@@ -86,6 +98,7 @@ void ImagePublisher::enableFreeze(
     std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
   std::lock_guard<std::mutex> lock(freezeMutex);
   std::string req = request->data ? "freeze" : "unfreeze";
+  
   RCLCPP_INFO(this->get_logger(), "Request to %s probe", req.c_str());
   if (freeze_state == request->data) {
     response->success = false;
@@ -138,22 +151,32 @@ int ImagePublisher::initializeParameters() {
 int ImagePublisher::createConnection() {
   RCLCPP_INFO(this->get_logger(), "Creating Clarius connection...");
 
-  return cusCastConnect(ipAddr_.c_str(), port_, "research",
-                        [](int imagePort, int imuPort, int swRevMatch) {
-                          if (imagePort == CUS_FAILURE) {
-                            RCLCPP_ERROR(rclcpp::get_logger("rclcpp"),
-                                         "Could not connect to scanner");
-                          } else {
-                            RCLCPP_INFO_STREAM(
-                                rclcpp::get_logger("rclcpp"),
-                                "Connected: image port = "
-                                    << imagePort << ", imu port = " << imuPort
-                                    << ", software revision match = "
-                                    << swRevMatch);
-                          }
-                        });
-}
+  int result = CUS_FAILURE;
 
+  while (rclcpp::ok() && result == CUS_FAILURE) {
+    result = cusCastConnect(
+        ipAddr_.c_str(), port_, "research",
+        [](int imagePort, int imuPort, int swRevMatch) {
+          if (imagePort == CUS_FAILURE) {
+            RCLCPP_ERROR(
+                rclcpp::get_logger("rclcpp"),
+                "Could not connect to scanner, retrying in 1 second...");
+          } else {
+            RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"),
+                               "Connected: image port = "
+                                   << imagePort << ", imu port = " << imuPort
+                                   << ", software revision match = "
+                                   << swRevMatch);
+          }
+        });
+
+    if (result == CUS_FAILURE) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  }
+
+  return result;
+}
 int ImagePublisher::destroyConnection() { return cusCastDestroy(); }
 
 int main(int argc, char *argv[]) {
@@ -166,6 +189,7 @@ int main(int argc, char *argv[]) {
     return CUS_FAILURE;
   }
   node->createConnection();
+  node->init();
 
   RCLCPP_INFO(node->get_logger(), "Spinning node");
   rclcpp::spin(node);

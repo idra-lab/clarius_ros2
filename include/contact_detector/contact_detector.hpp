@@ -28,6 +28,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr
       ft_sensor_subscriber_;
 
+  rclcpp::Time time_from_last_freeze_;
   // Callback function for force torque sensor data
   void ftSensorCallback(const geometry_msgs::msg::WrenchStamped::SharedPtr msg);
 };

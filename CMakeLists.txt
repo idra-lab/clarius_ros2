@@ -6,6 +6,7 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
 # openCV
 # find_package(OpenCV REQUIRED)
 # Use C++14
@@ -33,6 +34,7 @@ ament_target_dependencies(clarius_wrapper
   sensor_msgs
   std_srvs
   cv_bridge
+  image_transport
 )
 ament_target_dependencies(contact_detector
   rclcpp

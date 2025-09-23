@@ -25,6 +25,7 @@ ContactDetector::ContactDetector(const std::string &node_name,
           ft_sensor_topic_name_, rclcpp::SensorDataQoS(),
           std::bind(&ContactDetector::ftSensorCallback, this,
                     std::placeholders::_1));
+  time_from_last_freeze_ = this->now();
 }
 void ContactDetector::ftSensorCallback(
     const geometry_msgs::msg::WrenchStamped::SharedPtr msg) {
@@ -39,23 +40,30 @@ void ContactDetector::ftSensorCallback(
       request->data = false; // Set to false to unfreeze
       in_contact_ = true;
       changed_state_ = true;
+      time_from_last_freeze_ = this->now();
     }
   }
   if (in_contact_) {
-    if (std::abs(msg->wrench.force.x) < force_threshold_ &&
-        std::abs(msg->wrench.force.y) < force_threshold_ &&
-        std::abs(msg->wrench.force.z) < force_threshold_) {
-      RCLCPP_WARN(this->get_logger(), "Contact released!");
-      in_contact_ = false;
-      request->data = true; // Set to true to freeze
-      changed_state_ = true;
+    if (this->now() - time_from_last_freeze_ >
+        rclcpp::Duration::from_seconds(3.0)) {
+      if (std::abs(msg->wrench.force.x) < force_threshold_ &&
+          std::abs(msg->wrench.force.y) < force_threshold_ &&
+          std::abs(msg->wrench.force.z) < force_threshold_) {
+        RCLCPP_WARN(this->get_logger(), "Contact released!");
+        in_contact_ = false;
+        request->data = true; // Set to true to freeze
+        changed_state_ = true;
+      }
+    }else{
+      RCLCPP_INFO(this->get_logger(),
+                "Cooldown of 3 seconds not yet reached since last freeze.");
     }
   }
   if (!changed_state_) {
     return;
   }
   auto result_future = freeze_service_client_->async_send_request(request);
-  
+
   changed_state_ = false;
   // if (rclcpp::spin_until_future_complete(this->get_node_base_interface(),
   //                                        result_future) ==
