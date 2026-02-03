@@ -20,9 +20,8 @@ def generate_launch_description():
                 parameters=[
                     {"us_image_topic_name": "test"},
                     {"frame_id": "clarius_probe"},
-                    # {"ip_address": "192.168.1.1"},
                     {"ip_address": "10.160.50.119"},
-                    {"port": 5828},
+                    {"port": 46869},
                 ],
             ),
         ]

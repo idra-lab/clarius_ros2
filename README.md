@@ -17,12 +17,36 @@ cd <your_ros2_workspace>
 colcon build --symlink-install
 ```
 ## Run the wrapper
+To run the application ensure that all the following devices are under the same local network:
+ - the Clarius ultrasound scanner
+ - the device running the Clarius app
+ - the computer running this application.
+
 1. Source your workspace
 ```bash
 source <your_ros2_workspace>/install/setup.bash
 ```
-2. Run the wrapper
+2. Retrieve your `ip_address` and `port` of your US scanner by tapping on the battery indicator and set them in the launch file `us_stream.launch.py`
+    
+    <center><img src="assets/indicators.png" alt="indicators" width="400"></center>
+    
+    ```
+        # Set your local ip address and port here in us_stream.launch.py
+        Node(
+            package="clarius_ros2",
+            executable="clarius_wrapper",
+            output="screen",
+            # passing the argument to the node
+            parameters=[
+                {"us_image_topic_name": "test"},
+                {"frame_id": "clarius_probe"},
+                {"ip_address": "10.160.50.119 "}, # <- set your local ip address here
+                {"port": 46869}, # <- set your local port here
+            ],
+        ),
+    ```
+3. Run the wrapper
 ```bash
 ros2 launch clarius_ros2 us_stream.launch.py us_image_topic_name:=us_image
 ```
-3. check the image topic in Rviz and available services with `ros2 service list`
+4. check the image topic in Rviz and available services with `ros2 service list`
