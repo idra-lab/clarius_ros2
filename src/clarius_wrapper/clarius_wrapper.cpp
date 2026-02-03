@@ -111,7 +111,7 @@ void ImagePublisher::enableFreeze(
         "Freeze state already set to " + req + ". No action taken.";
     return;
   } else {
-    auto result = cusCastUserFunction(Freeze, 0, nullptr);
+    auto result = castUserFunction(Freeze, 0, nullptr);
     if (result != 0) {
       response->success = false;
       response->message = "Freeze state failed to change.";

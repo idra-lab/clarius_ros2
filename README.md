@@ -16,6 +16,8 @@ git clone git@github.com:Hydran00/clarius_ros2.git
 cd <your_ros2_workspace>
 colcon build --symlink-install
 ```
+
+
 ## Run the wrapper
 To run the application ensure that all the following devices are under the same local network:
  - the Clarius ultrasound scanner
@@ -40,13 +42,18 @@ source <your_ros2_workspace>/install/setup.bash
             parameters=[
                 {"us_image_topic_name": "test"},
                 {"frame_id": "clarius_probe"},
-                {"ip_address": "10.160.50.119 "}, # <- set your local ip address here
+                {"ip_address": "10.160.50.119"}, # <- set your local ip address here
                 {"port": 46869}, # <- set your local port here
+                {"show_image": True},
             ],
         ),
     ```
-3. Run the wrapper
-```bash
-ros2 launch clarius_ros2 us_stream.launch.py us_image_topic_name:=us_image
-```
-4. check the image topic in Rviz and available services with `ros2 service list`
+3. Allow traffic on the transmission port. There is also an option in Clarius App to always use the same port for streaming (Research 5828).
+    ```bash
+    sudo ufw allow <your port>/udp
+    ```
+4. Run the wrapper
+    ```bash
+    ros2 launch clarius_ros2 us_stream.launch.py 
+    ```
+5. check the image topic in Rviz and available services with `ros2 service list`
