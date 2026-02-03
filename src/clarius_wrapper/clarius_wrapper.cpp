@@ -76,7 +76,7 @@ void ImagePublisher::enableFreeze(
   RCLCPP_INFO(this->get_logger(), "Request to %s probe",
               request->data ? "freeze" : "unfreeze");
 
-  if (cusCastUserFunction(Freeze, 0, nullptr) < 0) {
+  if (castUserFunction(Freeze, 0, nullptr) < 0) {
     RCLCPP_ERROR(this->get_logger(), "Failed to toggle freeze state");
   }
 
@@ -87,7 +87,7 @@ void ImagePublisher::enableFreeze(
 int ImagePublisher::initializeParameters() {
   RCLCPP_INFO(this->get_logger(), "Initializing Clarius parameters...");
 
-  initParams_ = cusCastDefaultInitParams();
+  initParams_ = castDefaultInitParams();
   initParams_.args.argc = 0;
   initParams_.args.argv = nullptr;
   initParams_.storeDir = KEYDIR;
@@ -104,7 +104,7 @@ int ImagePublisher::initializeParameters() {
   initParams_.width = 1280;
   initParams_.height = 720;
 
-  if (cusCastInit(&initParams_) < 0) {
+  if (castInit(&initParams_) < 0) {
     RCLCPP_ERROR(this->get_logger(), "Failed to initialize Clarius caster");
     return -1;
   }
@@ -115,7 +115,7 @@ int ImagePublisher::initializeParameters() {
 int ImagePublisher::createConnection() {
   RCLCPP_INFO(this->get_logger(), "Creating Clarius connection...");
 
-  return cusCastConnect(ipAddr_.c_str(), port_, "research",
+  return castConnect(ipAddr_.c_str(), port_, "research",
                         [](int imagePort, int imuPort, int swRevMatch) {
                           if (imagePort == CUS_FAILURE) {
                             RCLCPP_ERROR(rclcpp::get_logger("rclcpp"),
@@ -131,7 +131,7 @@ int ImagePublisher::createConnection() {
                         });
 }
 
-int ImagePublisher::destroyConnection() { return cusCastDestroy(); }
+int ImagePublisher::destroyConnection() { return castDestroy(); }
 
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
