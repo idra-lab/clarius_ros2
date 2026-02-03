@@ -219,24 +219,24 @@ void processEventLoop(std::atomic_bool& quit) {
       quit = true;
       break;
     } else if (cmd == 'F' || cmd == 'f') {
-      if (cusCastUserFunction(Freeze, 0, nullptr) < 0)
+      if (castUserFunction(Freeze, 0, nullptr) < 0)
         ERROR << "error toggling freeze" << std::endl;
     } else if (cmd == 'D') {
-      if (cusCastUserFunction(DepthInc, 0, nullptr) < 0)
+      if (castUserFunction(DepthInc, 0, nullptr) < 0)
         ERROR << "error incrementing depth" << std::endl;
     } else if (cmd == 'd') {
-      if (cusCastUserFunction(DepthDec, 0, nullptr) < 0)
+      if (castUserFunction(DepthDec, 0, nullptr) < 0)
         ERROR << "error decrementing depth" << std::endl;
     } else if (cmd == 'G') {
-      if (cusCastUserFunction(GainInc, 0, nullptr) < 0)
+      if (castUserFunction(GainInc, 0, nullptr) < 0)
         ERROR << "error incrementing gain" << std::endl;
     } else if (cmd == 'g') {
-      if (cusCastUserFunction(GainDec, 0, nullptr) < 0)
+      if (castUserFunction(GainDec, 0, nullptr) < 0)
         ERROR << "error decrementing gain" << std::endl;
     } else if (cmd == 'S' || cmd == 's') {
       streamOutput_ = !streamOutput_;
     } else if (cmd == 'R' || cmd == 'r') {
-      if (cusCastRequestRawData(0, 0, 1, [](int sz, const char*) {
+      if (castRequestRawData(0, 0, 1, [](int sz, const char*) {
             if (sz < 0)
               ERROR << "error requesting raw data" << std::endl;
             else if (sz == 0) {
@@ -254,7 +254,7 @@ void processEventLoop(std::atomic_bool& quit) {
       else {
         buffer_ = reinterpret_cast<char*>(malloc(szRawData_));
 
-        if (cusCastReadRawData((void**)(&buffer_), [](int ret) {
+        if (castReadRawData((void**)(&buffer_), [](int ret) {
               if (ret == CUS_SUCCESS) {
                 PRINT << "successfully downloaded raw data" << std::endl;
                 saveRawData();
@@ -268,13 +268,13 @@ void processEventLoop(std::atomic_bool& quit) {
         continue;
       }
       if (captureID_ < 0) {
-        captureID_ = cusCastStartCapture(lasttime_);
+        captureID_ = castStartCapture(lasttime_);
         if (captureID_ < 0)
           ERROR << "failed to start capture" << std::endl;
         else
           PRINT << "started capture " << captureID_ << std::endl;
       } else {
-        if (cusCastFinishCapture(captureID_, &doneCapture) < 0)
+        if (castFinishCapture(captureID_, &doneCapture) < 0)
           ERROR << "failed to finish capture" << std::endl;
         else
           PRINT << "finished capture " << captureID_ << std::endl;
@@ -296,7 +296,7 @@ void processEventLoop(std::atomic_bool& quit) {
               << std::endl;
         continue;
       }
-      if (cusCastAddLabelOverlay(captureID_, prms.back().c_str(), x, y, 100.0,
+      if (castAddLabelOverlay(captureID_, prms.back().c_str(), x, y, 100.0,
                                  100.0) < 0)
         ERROR << "failed to add label to capture" << std::endl;
       else
@@ -323,7 +323,7 @@ void processEventLoop(std::atomic_bool& quit) {
       }
       const double points[] = {x1, y1, x2, y2};
       const int nDoubles = static_cast<int>(sizeof(points) / sizeof(points[0]));
-      if (cusCastAddMeasurement(captureID_, CusMeasurementTypeDistance,
+      if (castAddMeasurement(captureID_, CusMeasurementTypeDistance,
                                 prms.back().c_str(), points, nDoubles) < 0)
         ERROR << "failed to add label to capture" << std::endl;
       else
@@ -339,7 +339,7 @@ void processEventLoop(std::atomic_bool& quit) {
       std::string prm = prms[0];
       std::transform(prm.begin(), prm.end(), prm.begin(), ::tolower);
       if (prms[1] == "true" || prms[1] == "false") {
-        if (cusCastEnableParameter(
+        if (castEnableParameter(
                 prms[0].c_str(), (prms[1] == "true"), [](int ret) {
                   if (ret == CUS_FAILURE)
                     ERROR << "parameter enable/disable failed";
@@ -347,7 +347,7 @@ void processEventLoop(std::atomic_bool& quit) {
           ERROR << "parameter enable/disable failed";
         }
       } else if (prm.find("pulse") != std::string::npos) {
-        if (cusCastSetPulse(prms[0].c_str(), prms[1].c_str(), [](int ret) {
+        if (castSetPulse(prms[0].c_str(), prms[1].c_str(), [](int ret) {
               if (ret == CUS_FAILURE)
                 ERROR << "parameter pulse shape set failed";
             }) < 0) {
@@ -359,7 +359,7 @@ void processEventLoop(std::atomic_bool& quit) {
           ERROR << "could not convert parameter value to numeric value";
           continue;
         }
-        if (cusCastSetParameter(prms[0].c_str(), val, [](int ret) {
+        if (castSetParameter(prms[0].c_str(), val, [](int ret) {
               if (ret == CUS_FAILURE) ERROR << "parameter setting parameter";
             }) < 0) {
           ERROR << "parameter setting parameter";
@@ -471,7 +471,7 @@ int init(int& argc, char** argv) {
 
   PRINT << "starting caster...";
 
-  auto initParams = cusCastDefaultInitParams();
+  auto initParams = castDefaultInitParams();
   initParams.args.argc = argc;
   initParams.args.argv = argv;
   initParams.storeDir = keydir.c_str();
@@ -486,11 +486,11 @@ int init(int& argc, char** argv) {
   initParams.width = width;
   initParams.height = height;
   // initialize with callbacks
-  if (cusCastInit(&initParams) < 0) {
+  if (castInit(&initParams) < 0) {
     ERROR << "could not initialize caster" << std::endl;
     return CUS_FAILURE;
   }
-  if (cusCastConnect(ipAddr.c_str(), port, "research",
+  if (castConnect(ipAddr.c_str(), port, "research",
                      [](int imagePort, int imuPort, int swRevMatch) {
                        if (imagePort == CUS_FAILURE)
                          ERROR << "could not connect to scanner" << std::endl;

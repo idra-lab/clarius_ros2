@@ -13,7 +13,7 @@
 #include <std_srvs/srv/set_bool.hpp>
 
 // CvBridge
-#include <cv_bridge/cv_bridge.h>
+#include <cv_bridge/cv_bridge.h> // or cv_bridge/cv_bridge.hpp
 
 // Clarius SDK
 #include "cast_app.h"
@@ -68,6 +68,7 @@ private:
   std::string frame_id_;
   std::string ipAddr_;
   std::string us_image_topic_name_;
+  bool show_image_ = false;
   unsigned int port_ = 0;
 
   // Clarius SDK initialization parameters

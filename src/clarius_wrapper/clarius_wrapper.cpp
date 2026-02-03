@@ -41,6 +41,11 @@ ImagePublisher::ImagePublisher(const std::string &node_name,
   frame_id_ = this->get_parameter("frame_id").as_string();
   ipAddr_ = this->get_parameter("ip_address").as_string();
   port_ = static_cast<uint>(this->get_parameter("port").as_int());
+  show_image_ = this->get_parameter("show_image").as_bool();
+  if(show_image_)
+  {
+    RCLCPP_INFO(this->get_logger(), "Showing US image in OpenCV window");
+  }
 
   RCLCPP_INFO(this->get_logger(), "Publishing US image to topic: %s",
               us_image_topic_name_.c_str());
@@ -123,7 +128,7 @@ void ImagePublisher::enableFreeze(
 int ImagePublisher::initializeParameters() {
   RCLCPP_INFO(this->get_logger(), "Initializing Clarius parameters...");
 
-  initParams_ = cusCastDefaultInitParams();
+  initParams_ = castDefaultInitParams();
   initParams_.args.argc = 0;
   initParams_.args.argv = nullptr;
   initParams_.storeDir = KEYDIR;
@@ -140,7 +145,7 @@ int ImagePublisher::initializeParameters() {
   initParams_.width = 1280;
   initParams_.height = 720;
 
-  if (cusCastInit(&initParams_) < 0) {
+  if (castInit(&initParams_) < 0) {
     RCLCPP_ERROR(this->get_logger(), "Failed to initialize Clarius caster");
     return -1;
   }
@@ -151,33 +156,23 @@ int ImagePublisher::initializeParameters() {
 int ImagePublisher::createConnection() {
   RCLCPP_INFO(this->get_logger(), "Creating Clarius connection...");
 
-  int result = CUS_FAILURE;
-
-  while (rclcpp::ok() && result == CUS_FAILURE) {
-    result = cusCastConnect(
-        ipAddr_.c_str(), port_, "research",
-        [](int imagePort, int imuPort, int swRevMatch) {
-          if (imagePort == CUS_FAILURE) {
-            RCLCPP_ERROR(
-                rclcpp::get_logger("rclcpp"),
-                "Could not connect to scanner, retrying in 1 second...");
-          } else {
-            RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"),
-                               "Connected: image port = "
-                                   << imagePort << ", imu port = " << imuPort
-                                   << ", software revision match = "
-                                   << swRevMatch);
-          }
-        });
-
-    if (result == CUS_FAILURE) {
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-  }
-
-  return result;
+  return castConnect(ipAddr_.c_str(), port_, "research",
+                        [](int imagePort, int imuPort, int swRevMatch) {
+                          if (imagePort == CUS_FAILURE) {
+                            RCLCPP_ERROR(rclcpp::get_logger("rclcpp"),
+                                         "Could not connect to scanner");
+                          } else {
+                            RCLCPP_INFO_STREAM(
+                                rclcpp::get_logger("rclcpp"),
+                                "Connected: image port = "
+                                    << imagePort << ", imu port = " << imuPort
+                                    << ", software revision match = "
+                                    << swRevMatch);
+                          }
+                        });
 }
-int ImagePublisher::destroyConnection() { return cusCastDestroy(); }
+
+int ImagePublisher::destroyConnection() { return castDestroy(); }
 
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
