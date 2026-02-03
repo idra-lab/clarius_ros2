@@ -29,6 +29,11 @@ ImagePublisher::ImagePublisher(const std::string &node_name,
   frame_id_ = this->get_parameter("frame_id").as_string();
   ipAddr_ = this->get_parameter("ip_address").as_string();
   port_ = static_cast<uint>(this->get_parameter("port").as_int());
+  show_image_ = this->get_parameter("show_image").as_bool();
+  if(show_image_)
+  {
+    RCLCPP_INFO(this->get_logger(), "Showing US image in OpenCV window");
+  }
 
   RCLCPP_INFO(this->get_logger(), "Publishing US image to topic: %s",
               us_image_topic_name_.c_str());
@@ -57,8 +62,16 @@ void ImagePublisher::publishUSImage() {
   //   return;
   // }
 
-  // cv::imshow("Clarius US Image", imgContext.us_image);
-  // cv::waitKey(1);
+  if(imgContext.us_image.empty())
+  {
+    RCLCPP_WARN(this->get_logger(), "No image received yet from Clarius probe");
+    return;
+  }
+  if(show_image_)
+  {
+    cv::imshow("Clarius US Image", imgContext.us_image);
+    cv::waitKey(1);
+  }
 
   auto image_msg =
       cv_bridge::CvImage(std_msgs::msg::Header(), "bgra8", imgContext.us_image)

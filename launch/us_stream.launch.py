@@ -22,6 +22,7 @@ def generate_launch_description():
                     {"frame_id": "clarius_probe"},
                     {"ip_address": "10.160.50.119"},
                     {"port": 46869},
+                    {"show_image": True},
                 ],
             ),
         ]
