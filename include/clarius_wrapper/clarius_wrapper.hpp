@@ -7,6 +7,7 @@
 #include <opencv2/opencv.hpp>
 
 // ROS2
+#include "image_transport/image_transport.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <std_srvs/srv/set_bool.hpp>
@@ -36,6 +37,7 @@ extern ImgContext imgContext;
 // Callback function for receiving images from Clarius
 void StoreImageFn(const void *newImage, const CusProcessedImageInfo *nfo,
                   int npos, const CusPosInfo *pos);
+void FreezeCallbackFn(int val);
 
 class ImagePublisher : public rclcpp::Node {
 public:
@@ -45,7 +47,7 @@ public:
           rclcpp::NodeOptions()
               .allow_undeclared_parameters(true)
               .automatically_declare_parameters_from_overrides(true));
-
+  void init();
   int initializeParameters();
   int createConnection();
   int destroyConnection();
@@ -57,9 +59,10 @@ private:
                std::shared_ptr<std_srvs::srv::SetBool::Response> response);
 
   // ROS2 entities
-  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr us_image_publisher_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_freeze_service_;
   rclcpp::TimerBase::SharedPtr image_publisher_timer_;
+  std::shared_ptr<image_transport::ImageTransport> image_transport_;
+  image_transport::Publisher us_image_publisher_;
 
   // Parameters
   std::string frame_id_;

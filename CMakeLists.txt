@@ -6,6 +6,7 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
 # openCV
 # find_package(OpenCV REQUIRED)
 # Use C++14
@@ -22,6 +23,8 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/cast)
 
 # Executable
 add_executable(clarius_wrapper src/clarius_wrapper/clarius_wrapper.cpp)
+add_executable(contact_detector src/contact_detector/contact_detector.cpp)
+
 
 # Link the shared library
 target_link_libraries(clarius_wrapper cast ${OpenCV_LIBS})
@@ -31,9 +34,19 @@ ament_target_dependencies(clarius_wrapper
   sensor_msgs
   std_srvs
   cv_bridge
+  image_transport
 )
+ament_target_dependencies(contact_detector
+  rclcpp
+  sensor_msgs
+  std_srvs
+)
+
 # Install the executable
-install(TARGETS clarius_wrapper
+install(TARGETS clarius_wrapper 
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(TARGETS contact_detector 
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY launch

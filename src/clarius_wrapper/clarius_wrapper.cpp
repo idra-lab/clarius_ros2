@@ -2,7 +2,11 @@
 
 // Global instance for image data
 ImgContext imgContext;
+bool freeze_state = true;
 
+// Mutexes for thread safety
+std::mutex imgMutex;
+std::mutex freezeMutex;
 // Image callback from Clarius SDK
 void StoreImageFn(const void *newImage, const CusProcessedImageInfo *nfo,
                   int npos, const CusPosInfo *pos) {
@@ -10,14 +14,22 @@ void StoreImageFn(const void *newImage, const CusProcessedImageInfo *nfo,
 
   if (!newImage || !nfo)
     return;
-
+  std::lock_guard<std::mutex> lock(imgMutex);
   imgContext.width = nfo->width;
   imgContext.height = nfo->height;
   imgContext.channels = nfo->bitsPerPixel / 8;
+  cv::Mat rawImage(nfo->height, nfo->width, CV_8UC4,
+                   const_cast<void *>(newImage));
+  // Correct the format from ARGB to BGRA
+  cv::cvtColor(rawImage, imgContext.us_image,
+               cv::COLOR_BGRA2RGBA); // Swaps BGR to RGB and keeps alpha
 
-  imgContext.us_image = cv::Mat(imgContext.height, imgContext.width, CV_8UC4,
-                                const_cast<void *>(newImage));
   imgContext.newImageReceived = true;
+}
+void FreezeCallbackFn(int val) {
+  std::lock_guard<std::mutex> lock(freezeMutex);
+  // Update the freeze state
+  freeze_state = val;
 }
 
 // Constructor
@@ -40,61 +52,77 @@ ImagePublisher::ImagePublisher(const std::string &node_name,
   RCLCPP_INFO(this->get_logger(), "Connecting to Clarius at %s:%u",
               ipAddr_.c_str(), port_);
 
-  // Setup publisher and services
-
-  // image publisher uses SensorDataQoS
-  us_image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>(
-      us_image_topic_name_, rclcpp::SensorDataQoS());
   enable_freeze_service_ = this->create_service<std_srvs::srv::SetBool>(
       "enable_freeze", std::bind(&ImagePublisher::enableFreeze, this,
                                  std::placeholders::_1, std::placeholders::_2));
 
+  RCLCPP_INFO(this->get_logger(), "Node initialized.");
+}
+void ImagePublisher::init() {
   // Setup timer
+  RCLCPP_INFO(this->get_logger(), "Creating image publisher");
+  image_transport_ = std::make_shared<image_transport::ImageTransport>(
+      this->shared_from_this());
+  us_image_publisher_ = image_transport_->advertise(us_image_topic_name_, 10);
+
   image_publisher_timer_ =
       this->create_wall_timer(std::chrono::duration<double>(1.0 / 30.0),
                               std::bind(&ImagePublisher::publishUSImage, this));
-
-  RCLCPP_INFO(this->get_logger(), "Node initialized.");
 }
-
 void ImagePublisher::publishUSImage() {
-  // if (!imgContext.newImageReceived) {
-  //   return;
-  // }
-
-  if(imgContext.us_image.empty())
-  {
-    RCLCPP_WARN(this->get_logger(), "No image received yet from Clarius probe");
+  std::lock_guard<std::mutex> lock(imgMutex);
+  if (imgContext.us_image.empty()) {
+    RCLCPP_WARN_ONCE(this->get_logger(),
+                     "No image received yet, try to unfreeze");
     return;
   }
-  if(show_image_)
-  {
-    cv::imshow("Clarius US Image", imgContext.us_image);
-    cv::waitKey(1);
-  }
-
+  // RCLCPP_INFO(this->get_logger(), "Image size: %d x %d", imgContext.width,
+  //             imgContext.height);
+  cv::Mat imgContextCopy = imgContext.us_image.clone();
+  // compress the image to mono8
+  cv::cvtColor(imgContextCopy, imgContextCopy, cv::COLOR_RGBA2GRAY);
+  // increase brightness and contrast
+  imgContextCopy.convertTo(imgContextCopy, CV_8UC1, 1.5, 0); // Increase contrast
+  imgContextCopy = imgContextCopy + cv::Scalar(30); // Increase brightness
+  // RCLCPP_INFO(this->get_logger(), "Publishing image of size: %d x %d",
+  //             imgContextCopy.cols, imgContextCopy.rows);
+  cv::imshow("US Image", imgContextCopy);
+  cv::waitKey(1);
   auto image_msg =
-      cv_bridge::CvImage(std_msgs::msg::Header(), "bgra8", imgContext.us_image)
+      cv_bridge::CvImage(std_msgs::msg::Header(), "mono8", imgContextCopy)
           .toImageMsg();
   image_msg->header.frame_id = frame_id_;
   image_msg->header.stamp = this->now();
 
-  us_image_publisher_->publish(*image_msg);
+  us_image_publisher_.publish(*image_msg);
   // imgContext.newImageReceived = false;
 }
 
 void ImagePublisher::enableFreeze(
     const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
     std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
-  RCLCPP_INFO(this->get_logger(), "Request to %s probe",
-              request->data ? "freeze" : "unfreeze");
-
-  if (castUserFunction(Freeze, 0, nullptr) < 0) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to toggle freeze state");
+  std::lock_guard<std::mutex> lock(freezeMutex);
+  std::string req = request->data ? "freeze" : "unfreeze";
+  
+  RCLCPP_INFO(this->get_logger(), "Request to %s probe", req.c_str());
+  if (freeze_state == request->data) {
+    response->success = false;
+    response->message =
+        "Freeze state already set to " + req + ". No action taken.";
+    return;
+  } else {
+    auto result = cusCastUserFunction(Freeze, 0, nullptr);
+    if (result != 0) {
+      response->success = false;
+      response->message = "Freeze state failed to change.";
+      return;
+    }
+    freeze_state = request->data;
+    response->success = true;
+    response->message = "Freeze state changed to " + req + ".";
+    RCLCPP_INFO(this->get_logger(), "Probe set to %s", req.c_str());
   }
-
-  response->success = true;
-  response->message = "Freeze state changed";
+  // freeze_state value is updated by the callback function
 }
 
 int ImagePublisher::initializeParameters() {
@@ -109,7 +137,7 @@ int ImagePublisher::initializeParameters() {
   initParams_.newRawImageFn = cast_app::newRawImageFn;
   initParams_.newSpectralImageFn = cast_app::newSpectralImageFn;
   initParams_.newImuDataFn = cast_app::newImuData;
-  initParams_.freezeFn = cast_app::freezeFn;
+  initParams_.freezeFn = FreezeCallbackFn;
   initParams_.buttonFn = cast_app::buttonFn;
   initParams_.progressFn = cast_app::progressFn;
   initParams_.errorFn = cast_app::errorFn;
@@ -149,16 +177,6 @@ int ImagePublisher::destroyConnection() { return castDestroy(); }
 int main(int argc, char *argv[]) {
   rclcpp::init(argc, argv);
   std::cout << "Opencv version: " << CV_VERSION << std::endl;
-  // create window
-  cv::namedWindow("Clarius US Image",
-                  cv::WINDOW_NORMAL); // Makes the window resizable
-  // instantiate black window
-  // cv::Mat empty_img = cv::Mat::zeros(640, 480, CV_8UC4);
-  // cv::imshow("Clarius US Image", empty_img);
-  // cv::waitKey(0);
-  // RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Clarius US Image window
-  // created");
-
   auto node = std::make_shared<ImagePublisher>("image_publisher");
   int success = node->initializeParameters();
   if (success < 0) {
@@ -166,6 +184,7 @@ int main(int argc, char *argv[]) {
     return CUS_FAILURE;
   }
   node->createConnection();
+  node->init();
 
   RCLCPP_INFO(node->get_logger(), "Spinning node");
   rclcpp::spin(node);
